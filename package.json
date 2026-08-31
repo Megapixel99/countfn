@@ -1,6 +1,6 @@
 {
   "name": "countfn",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "How does this function's cost scale? Counted, not timed — and UNDETERMINED when no complexity class settles.",
   "type": "module",
   "exports": {

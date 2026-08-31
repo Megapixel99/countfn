@@ -19,4 +19,4 @@ export { Counter, CHANNELS, countedArray, countedCallable, countedMapping, instr
   from "./counters.js";
 export { Rng } from "./rng.js";
 export { NAMES as CLASS_NAMES } from "./classes.js";
-export const VERSION = "0.1.1";
+export const VERSION = "0.1.2";
