@@ -55,18 +55,26 @@ jobs:
       - name: one dependency, and it is undetermined
         run: |
           set -euo pipefail
-          python3 -m pip install --quiet undetermined
+          # `tomli` IS `tomllib` FOR 3.9 AND 3.10, and it is installed because this step
+          # runs on every version in the matrix including the 3.9 floor the manifest
+          # promises. `tomllib` is 3.11+, so the check written to stop the manifest lying
+          # failed with `No module named 'tomllib'` on the one version it exists to cover.
+          #
+          # A REAL PARSER RATHER THAN A REGEX, because the first fix here was a regex and
+          # it was worse than the bug. `\[(.*?)\]` stops at the first `]` in the text, and
+          # PEP 508 extras put one INSIDE a requirement: it read
+          # `["undetermined>=0.1.0", "requests[socks]>=2"]` as one dependency and went
+          # green on exactly the drift this step exists to catch. A gate that fails loudly
+          # on the version it cannot run is better than one that passes quietly on the
+          # thing it cannot parse.
+          python3 -m pip install --quiet undetermined tomli
           python3 - <<'PY'
-          # NOT tomllib, which is 3.11+. This step runs on every version in the
-          # matrix INCLUDING the 3.9 floor the manifest promises, so the check that
-          # verifies the claim could not run on the version it verifies -- it failed
-          # with `No module named 'tomllib'` on the first CI run this package ever had.
-          # `tools/depgraph.py` in the reckoner tree carries the same fallback for the
-          # same reason.
-          import re
-          text = open("pyproject.toml", encoding="utf-8").read()
-          block = re.search(r"^dependencies\s*=\s*\[(.*?)\]", text, re.M | re.S)
-          deps = re.findall(r'"([^"]+)"', block.group(1)) if block else []
+          try:
+              import tomllib
+          except ModuleNotFoundError:
+              import tomli as tomllib
+          with open("pyproject.toml", "rb") as fh:
+              deps = tomllib.load(fh)["project"]["dependencies"]
           assert deps == ["undetermined>=0.1.0"], f"dependencies drifted: {deps}"
           PY
           python3 -c "import countfn, countfn.core, countfn.counters, countfn.rng, countfn.classes; print('countfn', countfn.__version__)"
@@ -109,7 +117,7 @@ jobs:
         run: node --test js/test/*.test.js
 
   versions:
-    # THE VERSION LIVES IN FOUR FILES AND THAT IS FOUR PLACES TO DRIFT.
+    # THE VERSION LIVES IN FIVE FILES AND THAT IS FIVE PLACES TO DRIFT.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -120,7 +128,7 @@ jobs:
         with:
           node-version: '24'
 
-      - name: all four agree
+      - name: all five agree
         run: |
           set -euo pipefail
           python3 -m pip install --quiet undetermined
@@ -130,8 +138,18 @@ jobs:
           # cache invalidation is keyed on mtime at one-second granularity.
           dunder=$(PYTHONDONTWRITEBYTECODE=1 python3 -c "import countfn; print(countfn.__version__)")
           esm=$(node -p "require('fs').readFileSync('js/src/index.js','utf8').match(/VERSION = \"([^\"]+)\"/)[1]")
+          # THE FIFTH PLACE, and it was already wrong on the commit that created it.
+          # `package-lock.json` carries the version TWICE and `npm install` rewrites both
+          # from `package.json` -- so a lockfile committed at the old number is not an
+          # error anyone sees, it is a silent diff in the next person's working tree. It
+          # is checked here rather than gitignored because it is what pins `undetermined`
+          # to a resolved tarball and hash.
+          lock=$(node -p "require('./package-lock.json').version")
+          lockroot=$(node -p "require('./package-lock.json').packages[''].version")
           echo "pyproject=$py  package.json=$js  __version__=$dunder  VERSION=$esm"
-          if [ "$py" != "$js" ] || [ "$py" != "$dunder" ] || [ "$py" != "$esm" ]; then
+          echo "package-lock.json=$lock  package-lock.json packages['']=$lockroot"
+          if [ "$py" != "$js" ] || [ "$py" != "$dunder" ] || [ "$py" != "$esm" ] \
+             || [ "$py" != "$lock" ] || [ "$py" != "$lockroot" ]; then
             echo "::error::the versions disagree"
             exit 1
           fi
