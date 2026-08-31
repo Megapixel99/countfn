@@ -23,4 +23,4 @@ __all__ = ["measure", "describe", "UNDETERMINED", "CHANNELS", "CLASS_NAMES",
            "Counter", "CountedSequence", "CountedMapping", "CountedCallable", "Rng",
            "classes", "counters", "rng",
            "EXACT", "MEASURED", "UNEXERCISED"]
-__version__ = "0.1.0"
+__version__ = "0.1.1"

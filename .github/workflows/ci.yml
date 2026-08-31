@@ -57,11 +57,26 @@ jobs:
           set -euo pipefail
           python3 -m pip install --quiet undetermined
           python3 - <<'PY'
-          import tomllib
-          deps = tomllib.load(open("pyproject.toml", "rb"))["project"]["dependencies"]
+          # NOT tomllib, which is 3.11+. This step runs on every version in the
+          # matrix INCLUDING the 3.9 floor the manifest promises, so the check that
+          # verifies the claim could not run on the version it verifies -- it failed
+          # with `No module named 'tomllib'` on the first CI run this package ever had.
+          # `tools/depgraph.py` in the reckoner tree carries the same fallback for the
+          # same reason.
+          import re
+          text = open("pyproject.toml", encoding="utf-8").read()
+          block = re.search(r"^dependencies\s*=\s*\[(.*?)\]", text, re.M | re.S)
+          deps = re.findall(r'"([^"]+)"', block.group(1)) if block else []
           assert deps == ["undetermined>=0.1.0"], f"dependencies drifted: {deps}"
           PY
           python3 -c "import countfn, countfn.core, countfn.counters, countfn.rng, countfn.classes; print('countfn', countfn.__version__)"
+
+      - name: the JavaScript dependency, because the PARITY suites shell out to node
+        # `python/tests/test_parity.py` runs `node js/test/dump.mjs`, so the Python job
+        # needs `undetermined` resolvable even though it runs no JavaScript suite. Without
+        # this the first CI run failed with `Cannot find package 'undetermined'` from
+        # inside a Python test -- "Python" is not the same as "no Node".
+        run: npm install --no-audit --no-fund
 
       - name: the suites
         run: python3 -m unittest discover -s python/tests -v

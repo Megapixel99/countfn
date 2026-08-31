@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "countfn"
-version = "0.1.0"
+version = "0.1.1"
 description = "How does this function's cost scale? Counted, not timed -- and UNDETERMINED when no complexity class settles."
 readme = "README.md"
 requires-python = ">=3.9"
