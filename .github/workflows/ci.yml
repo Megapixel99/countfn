@@ -1,0 +1,255 @@
+# A tool that refuses to report a constant it has not shown to have settled has to answer
+# for its own.
+#
+# It ships TWO HALVES from one tree at one version, and the gates below are this package's
+# own properties pointed back at it:
+#
+#   1. THE HALVES AGREE ABOUT THE COUNTS, not only about the words. One seeded generator,
+#      one iteration rule, one subscript rule -- so the same algorithm on the same seed
+#      performs the same counted operations in both languages, to the integer. That is a
+#      stronger claim than the siblings in this network make, so it gets a stronger gate.
+#
+#   2. THE DIVERGENCE GATE. A tool that always answered `n^2` and a tool that always
+#      answered UNDETERMINED are both useless, and a suite containing only one kind of
+#      example cannot tell either of them from a working one. Three functions, three
+#      answers, asserted together.
+#
+#   3. EXACTLY ONE DEPENDENCY AND IT IS `undetermined`. Not "no dependencies" -- this
+#      package has one on purpose, because `fit` and `plateau` are what decide the verdict.
+#      The check is that it has not acquired a second.
+name: ci
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+  workflow_call:
+
+env:
+  PYTHONPATH: python
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  python:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # The floor is what `pyproject.toml` claims, and the claim is checked rather than
+        # trusted. A sibling in this network shipped a 3.12-only f-string under a >=3.9
+        # claim and did not import at all on the version it advertised.
+        python-version: ['3.9', '3.12', '3.13']
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: ${{ matrix.python-version }}
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'   # the parity tests shell out to it
+
+      - name: one dependency, and it is undetermined
+        run: |
+          set -euo pipefail
+          python3 -m pip install --quiet undetermined
+          python3 - <<'PY'
+          import tomllib
+          deps = tomllib.load(open("pyproject.toml", "rb"))["project"]["dependencies"]
+          assert deps == ["undetermined>=0.1.0"], f"dependencies drifted: {deps}"
+          PY
+          python3 -c "import countfn, countfn.core, countfn.counters, countfn.rng, countfn.classes; print('countfn', countfn.__version__)"
+
+      - name: the suites
+        run: python3 -m unittest discover -s python/tests -v
+
+  javascript:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: ['20', '22', '24']
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ matrix.node-version }}
+
+      - name: one dependency here too
+        run: |
+          set -euo pipefail
+          node -e "const p=require('./package.json');
+                   const deps=Object.keys(p.dependencies||{});
+                   if (deps.length!==1 || deps[0]!=='undetermined') {
+                     console.error('::error::dependencies drifted: '+JSON.stringify(deps));
+                     process.exit(1);
+                   }
+                   console.log(p.name, p.version)"
+          npm install --no-audit --no-fund
+
+      - name: the suites
+        run: node --test js/test/*.test.js
+
+  versions:
+    # THE VERSION LIVES IN FOUR FILES AND THAT IS FOUR PLACES TO DRIFT.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+
+      - name: all four agree
+        run: |
+          set -euo pipefail
+          python3 -m pip install --quiet undetermined
+          py=$(python3 -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")
+          js=$(node -p "require('./package.json').version")
+          # PYTHONDONTWRITEBYTECODE so this leaves no `.pyc` for a later job to read:
+          # cache invalidation is keyed on mtime at one-second granularity.
+          dunder=$(PYTHONDONTWRITEBYTECODE=1 python3 -c "import countfn; print(countfn.__version__)")
+          esm=$(node -p "require('fs').readFileSync('js/src/index.js','utf8').match(/VERSION = \"([^\"]+)\"/)[1]")
+          echo "pyproject=$py  package.json=$js  __version__=$dunder  VERSION=$esm"
+          if [ "$py" != "$js" ] || [ "$py" != "$dunder" ] || [ "$py" != "$esm" ]; then
+            echo "::error::the versions disagree"
+            exit 1
+          fi
+
+  parity:
+    # THE HALVES AGREE ABOUT THE COUNTS. Four algorithms written to one spec, run through
+    # both instruments, compared to the integer.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+
+      - name: the halves agree, and the test was not skipped
+        # `skipUnless(node)` keeps the suite runnable for a Python-only contributor. In CI
+        # a skip and a pass look identical in a tally, so the count is asserted.
+        run: |
+          set -euo pipefail
+          python3 -m pip install --quiet undetermined
+          npm install --no-audit --no-fund
+          out=$(python3 -m unittest discover -s python/tests -p 'test_parity.py' -v 2>&1)
+          echo "$out"
+          if echo "$out" | grep -q "skipped"; then
+            echo "::error::the parity tests were SKIPPED, so nothing checked the contract"
+            exit 1
+          fi
+          ran=$(echo "$out" | grep -c " \.\.\. ok")
+          echo "parity assertions that ran: $ran"
+          if [ "$ran" -lt 5 ]; then
+            echo "::error::expected at least 5 parity tests, saw $ran"
+            exit 1
+          fi
+
+  itself:
+    # THE DIVERGENCE GATE, run as a job rather than only as a unit test, because it is the
+    # claim the package lives or dies on.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+      - run: python3 -m pip install --quiet undetermined
+      - run: npm install --no-audit --no-fund
+
+      - name: three functions, three answers, and both halves say the same three
+        # A tool that always named a class and a tool that always refused would each pass
+        # a gate built from one example. This is built from three, and it checks the two
+        # halves against each other at the same time.
+        run: |
+          set -euo pipefail
+          python3 - <<'PY' > /tmp/py.txt
+          import sys
+          sys.path[:0] = ["python", "python/tests"]
+          from countfn import UNDETERMINED, measure
+          from _scenarios import binary_search, insertion_sort, linear_scan
+          rows = [
+              ("insertion-sort", measure(insertion_sort, sizes=[16, 32, 64, 128], trials=8,
+                                         make_input=lambda n, r: r.ints(n, 10000))),
+              ("binary-search", measure(binary_search, sizes=[64, 128, 256, 512], trials=30,
+                                        make_input=lambda n, r: r.sample(n * 10, n))),
+              ("linear-scan", measure(linear_scan, sizes=[16, 32, 64, 128], trials=5,
+                                      make_input=lambda n, r: r.ints(n, 1000))),
+          ]
+          for name, report in rows:
+              entry = report["per_channel"]["reads"]
+              print(name, entry["verdict"] or "UNDETERMINED", entry["regime"])
+          PY
+          cat /tmp/py.txt
+          expected=$'insertion-sort n^2 measured\nbinary-search log n measured\nlinear-scan UNDETERMINED exact'
+          if [ "$(cat /tmp/py.txt)" != "$expected" ]; then
+            echo "::error::the Python half did not produce three different answers"
+            exit 1
+          fi
+
+          node --input-type=module -e '
+            import { measure } from "./js/src/index.js";
+            import { binarySearch, insertionSort, linearScan } from "./js/test/scenarios.mjs";
+            const rows = [
+              ["insertion-sort", measure(insertionSort, { sizes: [16,32,64,128], trials: 8,
+                 makeInput: (n, r) => r.ints(n, 10000) })],
+              ["binary-search", measure(binarySearch, { sizes: [64,128,256,512], trials: 30,
+                 makeInput: (n, r) => r.sample(n * 10, n) })],
+              ["linear-scan", measure(linearScan, { sizes: [16,32,64,128], trials: 5,
+                 makeInput: (n, r) => r.ints(n, 1000) })],
+            ];
+            for (const [name, report] of rows) {
+              const e = report.per_channel.reads;
+              console.log(name, e.verdict ?? "UNDETERMINED", e.regime);
+            }
+          ' > /tmp/js.txt
+          cat /tmp/js.txt
+          if ! diff -u /tmp/py.txt /tmp/js.txt; then
+            echo "::error::the two halves reached different verdicts"
+            exit 1
+          fi
+
+      - name: ...and the same algorithm performs the same counted operations
+        # The claim `didrun` and `zerocase` cannot make. Asserted end to end rather than
+        # only inside the parity suite, on one algorithm whose numbers are in the README.
+        run: |
+          set -euo pipefail
+          python3 - <<'PY' > /tmp/py-counts.txt
+          import sys
+          sys.path[:0] = ["python", "python/tests"]
+          from countfn.counters import Counter, instrument
+          from countfn.rng import Rng
+          from _scenarios import insertion_sort
+          c = Counter()
+          insertion_sort(instrument(Rng(17).ints(64, 10000), c))
+          print(c.snapshot()["reads"], c.snapshot()["writes"])
+          PY
+          node --input-type=module -e '
+            import { Counter, instrument } from "./js/src/counters.js";
+            import { Rng } from "./js/src/rng.js";
+            import { insertionSort } from "./js/test/scenarios.mjs";
+            const c = new Counter();
+            insertionSort(instrument(new Rng(17).ints(64, 10000), c));
+            console.log(c.snapshot().reads, c.snapshot().writes);
+          ' > /tmp/js-counts.txt
+          echo "python: $(cat /tmp/py-counts.txt)   javascript: $(cat /tmp/js-counts.txt)"
+          if ! diff -q /tmp/py-counts.txt /tmp/js-counts.txt; then
+            echo "::error::the two instruments counted different operations"
+            exit 1
+          fi
+          if [ "$(cat /tmp/py-counts.txt)" != "3812 1848" ]; then
+            echo "::error::the counts moved from the number in the README"
+            exit 1
+          fi

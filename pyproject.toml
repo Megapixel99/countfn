@@ -1,0 +1,43 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "countfn"
+version = "0.1.0"
+description = "How does this function's cost scale? Counted, not timed -- and UNDETERMINED when no complexity class settles."
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+keywords = ["complexity", "big-o", "algorithmic-complexity", "operation-count",
+            "empirical", "scaling", "profiling", "deterministic", "reproducible",
+            "measurement", "refusal", "undetermined"]
+# LAYER 1. One edge, and it is load-bearing rather than decorative: `fit`, `plateau`,
+# `UNDETERMINED` and `PLATEAU_RUN` are imported and do the deciding. What is here is an
+# instrument that counts operations instead of reading a clock, and three refusals that
+# are specific to counting.
+#
+# The edge is what makes this package different from its incumbents rather than faster
+# than them. `big-O` on PyPI and `big-o-calculator` on npm both fit a curve to TIMINGS
+# and both always return a class; a timing is a mean over noise, which is the observable
+# `undetermined` refuses outright. Remove the dependency and this is another curve fit.
+#
+# NO `nondet` EDGE, and it was considered. `nondet` re-runs a function in fresh
+# processes to see whether it answers the same; the reproducibility this package needs is
+# about a function AND an input builder AND a seeded generator, in one process, and it is
+# a precondition rather than a finding. It is implemented natively in `core._reproducible`
+# and runs on every call -- see the README. `nondet` remains the right tool for the
+# functions a `make_input` calls, which do have `FILE::NAME` addresses.
+#
+# Dependencies point strictly downward; `tools/depgraph.py` in the reckoner tree asserts
+# it.
+dependencies = ["undetermined>=0.1.0"]
+
+# NO CONSOLE SCRIPT, and the absence is a decision. The inputs here are a function and an
+# input builder -- code objects with closures in them. There is nothing to pass on a
+# command line that would not amount to naming a symbol and importing it, so this ships an
+# import and no CLI. `undetermined` ships no CLI for the same reason.
+
+[tool.setuptools]
+package-dir = { "" = "python" }
+packages = ["countfn"]
