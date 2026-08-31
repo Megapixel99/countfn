@@ -1,6 +1,6 @@
 # `countfn`
 
-**How does this function's cost scale? Counted, not timed — and `UNDETERMINED` when no
+**How does this function's cost scale? Counted, not timed, and `UNDETERMINED` when no
 class settles.**
 
 ```sh
@@ -43,9 +43,9 @@ Every empirical complexity tool on either registry measures elapsed time.
 
 | | registry | mechanism | can it refuse? |
 |---|---|---|---|
-| [`big-O`](https://pypi.org/project/big-O/) | PyPI | *"empirical estimation of time complexity from execution time"* | no — it returns a class |
+| [`big-O`](https://pypi.org/project/big-O/) | PyPI | *"empirical estimation of time complexity from execution time"* | no; it returns a class |
 | [`big-o-calculator`](https://www.npmjs.com/package/big-o-calculator) | npm | generates growing inputs, **measures run time**, reports the "probable" complexity | no |
-| [`worstcase`](https://www.npmjs.com/package/worstcase) | npm | **static** — `@babel/parser`, counts nested loops | n/a |
+| [`worstcase`](https://www.npmjs.com/package/worstcase) | npm | **static**: `@babel/parser`, counts nested loops | n/a |
 
 A timing is a mean over noise that reads the clock. This package is built on
 [`undetermined`](https://github.com/Megapixel99/undetermined), whose central precondition
@@ -53,7 +53,7 @@ A timing is a mean over noise that reads the clock. This package is built on
 
 > a mean over noise still has a standard error, still forms a ladder, and can still
 > plateau. Every guard downstream compares against that error, so a broken adapter does
-> not produce a wrong-*looking* answer — it produces a **confident** one.
+> not produce a wrong-*looking* answer; it produces a **confident** one.
 
 An operation count has none of that. For a given input it is the same number on a loaded
 laptop and an idle server, in a container and on metal, this year and next. So the ladder,
@@ -81,7 +81,7 @@ every loop header show up as work.
 
 **Comparisons are not a channel, and that is why `calls` exists.** `a < b` on two objects
 calls `Symbol.toPrimitive` on *both* operands in JavaScript and one dunder in Python, so a
-comparison costs two events there and one here — and dividing by two is a guess about how
+comparison costs two events there and one here, and dividing by two is a guess about how
 the operands were spelled. Wrap the comparator instead and both halves count one call per
 call:
 
@@ -103,7 +103,7 @@ search is `log n`, an insertion sort is `n²`, a merge sort is `n log n`.
 ## Three refusals
 
 **A count that depends only on `n` is refused.** A linear scan performs exactly `n` reads
-whatever is in the list, so every rung has a standard error of *zero* — and there is no
+whatever is in the list, so every rung has a standard error of *zero*, and there is no
 noise for a plateau to be compared against. Comparing against the *size* instead is the one
 mistake this line of tools is shaped around not making, so:
 
@@ -123,7 +123,7 @@ decision about your problem, and the library will not choose it for you.
 
 **A constant that is still moving is not a class.** A merge sort's read count carries a
 lower-order term, so `reads / (n log n)` drifts from 2.755 to 2.861 across a 32× ladder.
-With nothing declared to compare that drift against, no candidate settles — and the report
+With nothing declared to compare that drift against, no candidate settles, and the report
 says so rather than naming the nearest one.
 
 **Two classes that both settle are `UNDETERMINED`, not a tie to be broken.** Both settling
@@ -131,7 +131,7 @@ means the ladder is too short or too noisy to tell them apart, and picking the
 better-looking one would be exactly the confident answer this package exists not to give.
 
 *"Widen it"* is advice nobody can act on without doing the arithmetic, so the arithmetic is
-done for you — on the **nearest** pair, because with six candidates settling at once `1`
+done for you, on the **nearest** pair, because with six candidates settling at once `1`
 and `2^n` are trivially far apart and say nothing about whether the ladder is adequate:
 
 ```
@@ -150,7 +150,7 @@ This is the sharpest thing to know before trusting a number.
 
 An out-of-place algorithm copies its input into working structures of its own, and does
 the rest of its work where nothing is counting. A merge sort measured naively reports `n`
-reads — which is **true**, and is not what anybody means by the cost of a merge sort.
+reads, which is **true**, and is not what anybody means by the cost of a merge sort.
 
 So a function may declare a **second parameter** and is handed a `probe` that wraps
 anything else on the same counter:
@@ -176,7 +176,7 @@ sides of it: with `probe`, the same merge sort reads far more than `n`; without 
 
 ## One generator, and the halves agree to the integer
 
-`didrun` and `zerocase` — the siblings in this network — assert that their two halves reach
+`didrun` and `zerocase` (the siblings in this network) assert that their two halves reach
 the same verdict and print the same sentence. This package claims something stronger:
 
 > the same algorithm, on the same seed, performs **the same counted operations** in Python
@@ -184,13 +184,13 @@ the same verdict and print the same sentence. This package claims something stro
 
 That is possible because three things are part of the contract rather than left to each
 language: one seeded generator (**mulberry32**, specified in 32-bit arithmetic and
-identical in both), one iteration rule (n reads, never n+1 — Python's fallback protocol
+identical in both), one iteration rule (n reads, never n+1: Python's fallback protocol
 would call `__getitem__` until it raised), and one subscript rule (integer keys only).
 
 `make_input(n, rng)` receives that generator, with `random()`, `int(n)`, `sample(n, k)`,
 `shuffle(list)` and `ints(count, bound)`. It is deliberately small. A Python-only caller who
 wants the standard library back can write `random.Random(rng.seed)` and keep
-reproducibility, at the cost of the parity above — which is the caller's trade to make.
+reproducibility, at the cost of the parity above, which is the caller's trade to make.
 
 The parity suite runs four algorithms written to one spec through both halves and compares
 the count tables. Insertion sort on seed 17 at n=64 is `{reads: 3812, writes: 1848}` in
@@ -206,14 +206,14 @@ So the real function is called twice with the same `(size, seed)` and the counts
 before anything is fitted. It is a **raise**, not a refusal: the other refusals describe
 what a function would not reveal, this one says the instrument was wired up wrong.
 
-That is the same reasoning `undetermined` used when it **rejected** an edge to `nondet` —
+That is the same reasoning `undetermined` used when it **rejected** an edge to `nondet`:
 a dependency that looks like a guarantee and is not is worse than no dependency. `nondet`
 remains the right tool for the functions your `make_input` calls, which do have
 `FILE::NAME` addresses.
 
 ## Two findings about the dependency, reported rather than worked around quietly
 
-**`undetermined.ladder_for` keeps a rung only `if c is not None and se`** — so a rung whose
+**`undetermined.ladder_for` keeps a rung only `if c is not None and se`**, so a rung whose
 standard error is *exactly zero* is dropped. A **perfectly** determined constant is
 therefore reported as:
 
@@ -221,8 +221,8 @@ therefore reported as:
 ladder shorter than the required run of 3
 ```
 
-…about a ladder that was full. The guard is doing something necessary — `plateau` divides
-by `se²` and would raise — but the message describes the ladder when the truth is about the
+…about a ladder that was full. The guard is doing something necessary: `plateau` divides
+by `se²` and would raise, but the message describes the ladder when the truth is about the
 observable, and those send a reader to different places. Every deterministic operation count
 is exactly this case, which is why `countfn` classifies the regime itself before calling in,
 and why the `exact` refusal above exists at all.
@@ -237,7 +237,7 @@ py  3 rungs from truth=1e+06 agree within 2.0 sigma
 js  3 rungs from truth=1000000 agree within 2.0 sigma
 ```
 
-`undetermined`'s own parity suite asserts those strings agree — on a ladder whose truths
+`undetermined`'s own parity suite asserts those strings agree, on a ladder whose truths
 top out at 512. This package's parity suite compares the **rendered report**, so it found
 it on the first run after that comparison was added. The fix here is not to reformat
 somebody else's sentence: `countfn` states the plateau in its own words and in **sizes**,
@@ -271,7 +271,7 @@ tell a class that lost from one that was never in the running.
 
 - **It measures the cost of touching the input, not the total cost.** See the `probe`
   section above; without it, anything out-of-place reports a small number rather than a
-  wrong one. Arithmetic, allocation and recursion depth are not counted at all — and
+  wrong one. Arithmetic, allocation and recursion depth are not counted at all, and
   `calls` counts only the callables you chose to wrap.
 - **A count is not a runtime.** Two algorithms with the same read count can differ by an
   order of magnitude in cache behaviour, and this will report them identical. It answers
@@ -296,7 +296,7 @@ PYTHONPATH=python python3 -m unittest discover -s python/tests   # 45, six of th
 ```
 
 **The divergence gate is one test and it is the most important one here.** Three functions,
-three answers — `n^2`, `log n`, and a refusal — asserted together, so that a tool which
+three answers (`n^2`, `log n`, and a refusal) asserted together, so that a tool which
 always named a class and a tool which always refused both fail it. A parity suite in which
 both halves always answered `UNDETERMINED` would agree perfectly and prove nothing, so the
 parity table asserts it reaches every regime too.
