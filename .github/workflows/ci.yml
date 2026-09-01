@@ -17,6 +17,15 @@
 #   3. EXACTLY ONE DEPENDENCY AND IT IS `undetermined`. Not "no dependencies" -- this
 #      package has one on purpose, because `fit` and `plateau` are what decide the verdict.
 #      The check is that it has not acquired a second.
+#
+#   4. THE GATES ARE CHECKED FOR HAVING RUN AT ALL. `Ran 0 tests` exits 0, a glob that
+#      matched nothing exits 0, and a suite that skipped every case exits 0 -- a tally
+#      cannot tell any of those from the real thing, and this file is otherwise a long
+#      list of steps whose only report is a tick. `didrun` and `zerocase` (the siblings
+#      named in the README, which this package's parity claim is measured against) wrap
+#      the suites below and put a floor under what actually EXECUTED. They are installed
+#      GLOBALLY on the runner and never into `package.json`, because gate 3 is the exact
+#      property they would otherwise break.
 name: ci
 
 on:
@@ -86,8 +95,22 @@ jobs:
         # inside a Python test -- "Python" is not the same as "no Node".
         run: npm install --no-audit --no-fund
 
+      - name: the tools that check the checks
+        # Global, and that is the point: the step above asserts `dependencies` is exactly
+        # `undetermined`, and a gate weakened to make room for the thing that runs it is
+        # not a gate. These are runner tooling, not a dependency of the package.
+        run: npm install -g zerocase @megapixel99/didrun
+
       - name: the suites
-        run: python3 -m unittest discover -s python/tests -v
+        # `unittest discover` PRINTS `Ran 0 tests` AND EXITS 0 when the pattern matches
+        # nothing, which is what a green tick looks like the day someone renames a
+        # directory. `didrun` reads the count out of the summary -- stderr, which is
+        # where `unittest` writes it, so the evidence has to be the combined output --
+        # and puts a floor under it. 45 tests today; the floor is 40, so adding a test is
+        # not a CI change and losing a suite is.
+        run: |
+          didrun --expect-count "Ran (\d+) tests" --min 40 \
+            -- python3 -m unittest discover -s python/tests -v
 
   javascript:
     runs-on: ubuntu-latest
@@ -113,8 +136,24 @@ jobs:
                    console.log(p.name, p.version)"
           npm install --no-audit --no-fund
 
+      - name: the tools that check the checks
+        run: npm install -g zerocase @megapixel99/didrun
+
       - name: the suites
-        run: node --test js/test/*.test.js
+        # A REPORT RATHER THAN A REGEX OVER HUMAN-FACING TEXT. `node --test` chooses its
+        # default reporter by whether stdout is a TTY and the matrix here spans three
+        # majors, so the summary line is not a fixed target; the TAP plan is. `zerocase`
+        # counts `1..N` MINUS the `# SKIP` lines, so the floor lands on what executed
+        # rather than on what was collected -- a suite that skipped itself is not a suite
+        # that ran. `spec` still goes to the log so a failure stays readable, and the TAP
+        # file must have been written by THIS run or it is reported as the leftover it is.
+        # 37 tests today, floor 30.
+        run: |
+          zerocase --tap /tmp/js.tap --min 30 -- \
+            node --test \
+              --test-reporter=spec --test-reporter-destination=stdout \
+              --test-reporter=tap --test-reporter-destination=/tmp/js.tap \
+              js/test/*.test.js
 
   versions:
     # THE VERSION LIVES IN FIVE FILES AND THAT IS FIVE PLACES TO DRIFT.
@@ -167,23 +206,36 @@ jobs:
         with:
           node-version: '24'
 
+      - name: the tools that check the checks
+        run: npm install -g zerocase @megapixel99/didrun
+
       - name: the halves agree, and the test was not skipped
         # `skipUnless(node)` keeps the suite runnable for a Python-only contributor. In CI
         # a skip and a pass look identical in a tally, so the count is asserted.
+        #
+        # `didrun` replaces the hand-rolled `grep -c` floor that used to be here. What it
+        # does NOT replace is the skip check below it: `Ran 6 tests` COUNTS THE SKIPPED
+        # ONES, so that number is a total, and a total is not a denominator. Six tests
+        # that all skipped clear the floor and are precisely the failure this job exists
+        # to catch, so both checks stay.
         run: |
           set -euo pipefail
           python3 -m pip install --quiet undetermined
           npm install --no-audit --no-fund
-          out=$(python3 -m unittest discover -s python/tests -p 'test_parity.py' -v 2>&1)
+          # `out=$(...)` under `set -e` aborts the step before the echo and takes the
+          # output of the failing run with it, so the status is caught and re-raised.
+          set +e
+          out=$(didrun --expect-count "Ran (\d+) tests" --min 5 \
+                  -- python3 -m unittest discover -s python/tests -p 'test_parity.py' -v 2>&1)
+          rc=$?
+          set -e
           echo "$out"
+          if [ "$rc" -ne 0 ]; then
+            echo "::error::the parity suite did not run, or it failed"
+            exit "$rc"
+          fi
           if echo "$out" | grep -q "skipped"; then
             echo "::error::the parity tests were SKIPPED, so nothing checked the contract"
-            exit 1
-          fi
-          ran=$(echo "$out" | grep -c " \.\.\. ok")
-          echo "parity assertions that ran: $ran"
-          if [ "$ran" -lt 5 ]; then
-            echo "::error::expected at least 5 parity tests, saw $ran"
             exit 1
           fi
 
