@@ -1,5 +1,10 @@
 # `countfn`
 
+[![npm](https://img.shields.io/npm/v/countfn)](https://www.npmjs.com/package/countfn)
+[![PyPI](https://img.shields.io/pypi/v/countfn)](https://pypi.org/project/countfn/)
+[![CI](https://github.com/Megapixel99/countfn/actions/workflows/ci.yml/badge.svg)](https://github.com/Megapixel99/countfn/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 **How does this function's cost scale? Counted, not timed, and `UNDETERMINED` when no
 class settles.**
 
